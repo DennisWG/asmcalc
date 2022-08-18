@@ -6,7 +6,7 @@ set BuildType=%1
 if "%BuildType%"=="" (set BuildType=release)
 
 set ProjectName=%2
-if "%ProjectName%"=="" (set ProjectName=hello_world)
+if "%ProjectName%"=="" (set ProjectName=asmcalc)
 
 set BuildExt=%3
 if "%BuildExt%"=="" (set BuildExt=exe)
@@ -36,17 +36,13 @@ if "%BuildType%"=="clean" (
 echo Building in directory: %BuildDir% ...
 
 if not exist %BuildDir% mkdir %BuildDir%
-pushd %BuildDir%
 
-if not exist %BuildDir% mkdir %BuildDir%
-pushd %BuildDir%
+if not exist %BuildDir%\obj mkdir %BuildDir%\obj
 
-set EntryPoint="%~dp0src\%ProjectName%.asm"
+set SrcPath="%~dp0src\"
 
-set IntermediateObj=%BuildDir%\%ProjectName%.obj
 set OutBin=%BuildDir%\%ProjectName%.%BuildExt%
 
-set CommonCompilerFlags=-f win64 -I%~dp0 -l "%BuildDir%\%ProjectName%.lst"
 set DebugCompilerFlags=-gcv8
 
 if "%BuildExt%"=="exe" (
@@ -59,21 +55,28 @@ set CommonLinkerFlagsMSVC=%BinLinkerFlagsMSVC% /defaultlib:ucrt.lib /defaultlib:
 set DebugLinkerFlagsMSVC=/opt:noref /debug /pdb:"%BuildDir%\%ProjectName%.pdb"
 set ReleaseLinkerFlagsMSVC=/opt:ref
 
-if "%BuildType%"=="debug" (
-    set CompileCommand=nasm %CommonCompilerFlags% %DebugCompilerFlags% -o "%IntermediateObj%" %EntryPoint%
-    set LinkCommand=link "%IntermediateObj%" %CommonLinkerFlagsMSVC% %DebugLinkerFlagsMSVC% %AdditionalLinkerFlags% /out:"%OutBin%"
-) else (
-    set CompileCommand=nasm %CommonCompilerFlags% -o "%IntermediateObj%" %EntryPoint%
-    set LinkCommand=link "%IntermediateObj%" %CommonLinkerFlagsMSVC%  %ReleaseLinkerFlagsMSVC% %AdditionalLinkerFlags% /out:"%OutBin%"
-)
-
+set ObjFiles=
 echo.
-echo Compiling (command follows below)...
-echo %CompileCommand%
+echo Assembling
+for %%a in ("%SrcPath%*.asm") do (
+    call set "ObjFiles=%%ObjFiles%% %BuildDir%\obj\%%~na.obj"
 
-%CompileCommand%
+    echo %%a
+    if "%BuildType%"=="debug" (
+        call nasm -f win64 -I%~dp0 -l "%BuildDir%\obj\%%~na.lst" %DebugCompilerFlags% -o "%BuildDir%\obj\%%~na.obj" "%%~dpna.asm"
+    ) else (
+        call nasm -f win64 -I%~dp0 -l "%BuildDir%\obj\%%~na.lst" -o "%BuildDir%\obj\%%~na.obj" "%%~dpna.asm"
+    )
 
+    if %errorlevel% neq 0 goto error
+)
 if %errorlevel% neq 0 goto error
+
+if "%BuildType%"=="debug" (
+    set LinkCommand=link %ObjFiles% %CommonLinkerFlagsMSVC% %DebugLinkerFlagsMSVC% %AdditionalLinkerFlags% /out:"%OutBin%"
+) else (
+    set LinkCommand=link %ObjFiles% %CommonLinkerFlagsMSVC%  %ReleaseLinkerFlagsMSVC% %AdditionalLinkerFlags% /out:"%OutBin%"
+)
 
 echo.
 echo Linking (command follows below)...
@@ -104,6 +107,5 @@ goto end
 :end
 echo.
 echo Build script finished execution at %time%.
-popd
 popd
 exit /b %errorlevel%
